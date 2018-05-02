@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Fun 21 (Carnival)</string>
+
+    <string name="dummy_button">Dummy Button</string>
+    <string name="dummy_content">DUMMY\nCONTENT</string>
+    <string name="bank">Bank: \$%1$.2f</string>
+    <string name="bet">Bet: \$%1$.2f</string>
+</resources>
