@@ -1,12 +1,10 @@
 package us.jasonrobinson.fun21carnival.data.model
 
-import us.jasonrobinson.fun21carnival.data.util.ChipUtil
-
 open class Player(name: String, private val eventListener: EventListener) : Person(name) {
 
     private val chips: ArrayList<Chip> = arrayListOf()
 
-    override fun playHand(hand: Hand<*>, availableActions: List<Hand.Action>) = eventListener.onPlayHand(hand, availableActions)
+    override fun playHand(cards: List<Card>, availableActions: List<Hand.Action>) = eventListener.onPlayHand(cards, availableActions)
 
     fun takeInsurance() = eventListener.takeInsurance()
 
@@ -71,7 +69,7 @@ open class Player(name: String, private val eventListener: EventListener) : Pers
     fun getChips() = List(chips.size, { chips[it] })
 
     interface EventListener {
-        fun onPlayHand(hand: Hand<*>, availableActions: List<Hand.Action>): Hand.Action
+        fun onPlayHand(cards: List<Card>, availableActions: List<Hand.Action>): Hand.Action
 
         fun takeInsurance(): Boolean
 

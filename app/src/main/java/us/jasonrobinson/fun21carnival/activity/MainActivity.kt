@@ -13,11 +13,8 @@ import io.reactivex.subjects.PublishSubject
 import us.jasonrobinson.fun21carnival.R
 import us.jasonrobinson.fun21carnival.data.game.Blackjack
 import us.jasonrobinson.fun21carnival.data.game.Spanish21
-import us.jasonrobinson.fun21carnival.data.model.Chip
-import us.jasonrobinson.fun21carnival.data.model.Hand
+import us.jasonrobinson.fun21carnival.data.model.*
 import us.jasonrobinson.fun21carnival.data.model.Hand.Action.*
-import us.jasonrobinson.fun21carnival.data.model.HitSoft17Dealer
-import us.jasonrobinson.fun21carnival.data.model.Player
 import us.jasonrobinson.fun21carnival.data.util.ChipUtil
 import us.jasonrobinson.fun21carnival.view.SeatView
 import java.io.OutputStreamWriter
@@ -55,7 +52,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        override fun onPlayHand(hand: Hand<*>, availableActions: List<Hand.Action>): Hand.Action {
+        override fun onPlayHand(cards: List<Card>, availableActions: List<Hand.Action>): Hand.Action {
             runOnUiThread({ showActions(availableActions) })
             return actionSubject.blockingFirst()
         }

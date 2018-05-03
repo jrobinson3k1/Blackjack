@@ -130,7 +130,7 @@ abstract class Blackjack(private val shoe: Shoe, dealer: Dealer, val minimumBet:
         var action: Hand.Action = Hit
         while (!isResolved() && playingTotal() != 21 && action != Stay && action != Surrender && action != Split) {
             val availableActions = getAvailableActions(seat, this, action)
-            action = seat.person!!.playHand(this, availableActions)
+            action = seat.person!!.playHand(getCards().map { it.first }, availableActions)
             if (!availableActions.contains(action)) throw RuntimeException("Invalid action: ${action.name}")
             when (action) {
                 Hit -> addCard(shoe.takeTop())
