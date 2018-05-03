@@ -37,7 +37,7 @@ class SeatView : LinearLayout {
 
                 findViewById<TextView>(R.id.handTotal).apply {
                     text = hand.getTotalDisplay()
-                    setTextColor(if (hand.isBusted()) Color.RED else Color.BLACK)
+                    setTextColor(if (hand.isBusted()) Color.RED else Color.WHITE)
                 }
 
                 addView(this)
