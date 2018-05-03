@@ -1,7 +1,9 @@
 package us.jasonrobinson.fun21carnival.activity
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.support.design.widget.Snackbar
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.View
@@ -35,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playerSeatView: SeatView
     private lateinit var betTextView: TextView
     private lateinit var bankTextView: TextView
+    private lateinit var insuranceControllerLayout: View
 
     private lateinit var twoFiftyCount: TextView
     private lateinit var fiveCount: TextView
@@ -43,20 +46,29 @@ class MainActivity : AppCompatActivity() {
 
     private val blackjack: Blackjack = Spanish21(HitSoft17Dealer(), 500, 8)
     private val player = Player("Jason", object : Player.EventListener {
+
         override fun onBankChanged(player: Player, chips: List<Chip>) {
-            bankTextView.text = getString(R.string.bank, ChipUtil.getTotalDollars(chips))
-            betTextView.text = getString(R.string.bet, ChipUtil.getTotalDollars(blackjack.getPreBet(player).orEmpty()))
-            updateBank(chips)
+            runOnUiThread {
+                bankTextView.text = getString(R.string.bank, ChipUtil.getTotalDollars(chips))
+                betTextView.text = getString(R.string.bet, ChipUtil.getTotalDollars(blackjack.getPreBet(player).orEmpty()))
+                updateBank(chips)
+            }
         }
 
         override fun onPlayHand(hand: Hand<*>, availableActions: List<Hand.Action>): Hand.Action {
             runOnUiThread({ showActions(availableActions) })
             return actionSubject.blockingFirst()
         }
+
+        override fun takeInsurance(): Boolean {
+            runOnUiThread { showInsurance() }
+            return insuranceSubject.blockingFirst()
+        }
     })
     private var bet: ArrayList<Chip> = arrayListOf()
 
     val actionSubject: PublishSubject<Hand.Action> = PublishSubject.create()
+    val insuranceSubject: PublishSubject<Boolean> = PublishSubject.create()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,6 +101,7 @@ class MainActivity : AppCompatActivity() {
         playerSeatView = findViewById(R.id.playerSeat)
         betTextView = findViewById(R.id.bet)
         bankTextView = findViewById(R.id.bank)
+        insuranceControllerLayout = findViewById(R.id.insuranceController)
 
         twoFiftyCount = findViewById(R.id.TwoFiftyCount)
         fiveCount = findViewById(R.id.FiveCount)
@@ -111,15 +124,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         dealButton.setOnClickListener {
-            dealButton.visibility = View.GONE
-            betLayout.visibility = View.GONE
+            arrayOf(betLayout, nextHandButton, dealButton).forEach { it.visibility = View.GONE }
 
             Thread({
                 blackjack.deal()
                 runOnUiThread({
                     bet.clear()
                     handControllerLayout.visibility = View.GONE
-                    nextHandButton.visibility = View.VISIBLE
+                    insuranceControllerLayout.visibility = View.GONE
+
+                    if (player.getChips().isEmpty()) {
+                        Snackbar.make(playerSeatView, "You suck.", Snackbar.LENGTH_INDEFINITE).apply {
+                            setAction("Restart", {
+                                startActivity(Intent(this@MainActivity, MainActivity::class.java))
+                                finish()
+                            })
+                        }.show()
+                    } else nextHandButton.visibility = View.VISIBLE
                 })
             }).start()
         }
@@ -134,16 +155,24 @@ class MainActivity : AppCompatActivity() {
         doubleDownButton.setOnClickListener { actionSubject.onNext(DoubleDown) }
         splitButton.setOnClickListener { actionSubject.onNext(Split) }
         surrenderButton.setOnClickListener { actionSubject.onNext(Surrender) }
+
+        findViewById<Button>(R.id.takeInsurance).setOnClickListener { insuranceSubject.onNext(true) }
+        findViewById<Button>(R.id.passInsurance).setOnClickListener { insuranceSubject.onNext(false) }
     }
 
     private fun showActions(actions: List<Hand.Action>) {
-        arrayOf(nextHandButton, dealButton).forEach { it.visibility = View.GONE }
         handControllerLayout.visibility = View.VISIBLE
+        insuranceControllerLayout.visibility = View.GONE
+
         hitButton.visibility = if (actions.contains(Hit)) View.VISIBLE else View.GONE
         stayButton.visibility = if (actions.contains(Stay)) View.VISIBLE else View.GONE
         doubleDownButton.visibility = if (actions.contains(DoubleDown)) View.VISIBLE else View.GONE
         splitButton.visibility = if (actions.contains(Split)) View.VISIBLE else View.GONE
         surrenderButton.visibility = if (actions.contains(Surrender)) View.VISIBLE else View.GONE
+    }
+
+    private fun showInsurance() {
+        insuranceControllerLayout.visibility = View.VISIBLE
     }
 
     private fun updateBank(chips: List<Chip>) {

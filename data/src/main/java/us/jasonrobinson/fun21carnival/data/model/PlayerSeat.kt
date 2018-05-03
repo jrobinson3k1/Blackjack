@@ -1,28 +1,34 @@
 package us.jasonrobinson.fun21carnival.data.model
 
+import us.jasonrobinson.fun21carnival.data.util.ChipUtil
+
 class PlayerSeat : Seat<Player, PlayerHand>() {
 
     private var preBet = arrayListOf<Chip>()
+    private var insuranceBet = arrayListOf<Chip>()
 
     var splitCount = 0
         private set
 
     override fun onHandsDiscarded() {
         preBet.clear()
+        insuranceBet.clear()
         splitCount = 0
     }
 
     fun addToPreBet(chip: Chip) {
-        if (!person!!.getChips().contains(chip)) throw RuntimeException("Insufficient funds")
+        if (!person!!.getChips().contains(chip)) throw RuntimeException("Insufficient funds to pre-bet")
         preBet.add(chip)
         person!!.removeChip(chip)
     }
 
     fun getPreBet() = List(preBet.size, { preBet[it] })
 
+    fun getInsuranceBet() = List(insuranceBet.size, { insuranceBet[it] })
+
     fun canAffordDoubleDown(hand: PlayerHand) = person!!.findChipsForTotal(hand.betTotal()) != null
 
-    fun doubleBet(hand: PlayerHand) {
+    fun doubleDown(hand: PlayerHand) {
         val chips = person!!.findChipsForTotal(hand.betTotal()) ?: throw RuntimeException("Attempted to double down with insufficient chips")
         person!!.removeAllChips(chips)
         hand.addToBet(chips)
@@ -42,6 +48,15 @@ class PlayerSeat : Seat<Player, PlayerHand>() {
 
         splitCount++
     }
+
+    fun betInsurance() {
+        val insuranceChips = person!!.findChipsForTotal(ChipUtil.getTotalRaw(preBet) / 2)
+                ?: throw RuntimeException("Insufficient funds to bet insurance")
+        insuranceBet.addAll(insuranceChips)
+        person!!.removeAllChips(insuranceChips)
+    }
+
+    fun hasBetInsurance() = !insuranceBet.isEmpty()
 
     override fun createHand() = PlayerHand(person!!, preBet)
 

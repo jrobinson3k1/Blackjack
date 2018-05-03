@@ -16,10 +16,10 @@ abstract class Hand<out T : Person>(val owner: T) {
 
     fun getCards(): List<Pair<Card, Boolean>> = List(cards.size, { cards[it] })
 
-    fun cardTotal(): List<Int> {
+    fun cardTotal(includeHidden: Boolean = false): List<Int> {
         val totals = arrayListOf(0)
         val cardValues = cards.stream()
-                .filter { it.second }
+                .filter { if(!includeHidden) it.second else true }
                 .map { it.first.rank.value.toList() }
                 .collect(Collectors.toList())
 
@@ -34,6 +34,10 @@ abstract class Hand<out T : Person>(val owner: T) {
 
         return totals.stream().distinct().collect(Collectors.toList()).sorted()
     }
+
+    fun playingTotal(includeHidden: Boolean = false) = cardTotal(includeHidden).filter { it <= 21 }.max() ?: cardTotal().min() ?: 0
+
+    fun isBlackjack() = cards.size == 2 && playingTotal(true) == 21
 
     fun markResolved() {
         resolved = true

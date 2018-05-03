@@ -32,37 +32,65 @@ abstract class Blackjack(private val shoe: Shoe, dealer: Dealer, val minimumBet:
         }
         activeSeats.forEach { it.getHand(0).addCard(shoe.takeTop()) }
 
-        // Check for blackjack
-        activePlayerSeats.filter { it.getHand(0).playingTotal() == 21 }.forEach {
-            payoutHand(it.getHand(0), getBlackjackPayoutRatio())
+        // If player Blackjack beats dealer Blackjack, check for player blackjack
+        var checkedPlayerBlackjack = false
+        if (playerBlackjackBeatsDealerBlackjack()) {
+            resolvePlayerBlackjacks(activePlayerSeats)
+            checkedPlayerBlackjack = true
         }
 
-        // Players play their hands
-        activePlayerSeats.forEach {
-            val operatedElements = arrayListOf<PlayerHand>()
-            while (operatedElements.size < it.getHands().size) {
-                for (hand in it.getHands()) {
-                    if (!operatedElements.contains(hand)) {
+        // Check for dealer blackjack
+        var dealerBlackjack = false
+        val dealerHand = dealerSeat.getHand(0)
+        if (dealerHand.getCards().filter { it.second }.map { it.first }.first().rank == Rank.Ace) {
+            // Offer insurance
+            // NOTE: Insurance can be complicated due to needing to half bets that might result in needing
+            // to break down existing chips into smaller chips to make the total. Skipping implementing
+            // this for now since insurance is a sucker bet anyway.
+//            activePlayerSeats.forEach { if (it.person!!.takeInsurance()) it.betInsurance() }
+        }
+
+        if (dealerHand.isBlackjack()) {
+            dealerSeat.revealHoleCard()
+            payInsurance(activePlayerSeats)
+            dealerBlackjack = true
+        }
+
+        if (!dealerBlackjack) {
+            // Check for player blackjack if we haven't already
+            if (!checkedPlayerBlackjack) {
+                resolvePlayerBlackjacks(activePlayerSeats)
+            }
+
+            // Players play their hands
+            activePlayerSeats.forEach {
+                val playedHands = arrayListOf<PlayerHand>()
+                while (playedHands.size < it.getHands().filter { !it.isResolved() }.size) {
+                    for (hand in it.getHands().filter { !it.isResolved() && !playedHands.contains(it) }) {
                         val lastAction = playHand(it, hand)
                         if (lastAction == Surrender) surrenderHand(hand)
                         else if (isInstantPayoutAt21() && hand.playingTotal() == 21) {
-                            payoutHand(hand, getWinnerPayoutRatio())
+                            payoutHand(hand, getWinnerPayoutRatio(hand))
                         }
 
-                        operatedElements.add(hand)
+                        playedHands.add(hand)
                     }
                 }
             }
+
+            // Dealer reveals hole card after all players have played
+            dealerSeat.revealHoleCard()
+
+            // Only play dealer's hands if there are unresolved hands
+            if (activePlayerSeats.any { it.getHands().any { !it.isResolved() } }) playHand(dealerSeat, dealerSeat.getHand(0))
+
+            // Distribute winnings to winning players
+            payWinners(dealerSeat.getHand(0), activePlayerSeats)
         }
+    }
 
-        // Dealer reveals hole card after all players have played
-        dealerSeat.revealHoleCard()
-
-        // Only play dealers hands if there are unresolved hands
-        if (activePlayerSeats.any { it.getHands().any { !it.isResolved() } }) playHand(dealerSeat, dealerSeat.getHand(0))
-
-        // Distribute winnings to winning players
-        payWinners(dealerSeat.getHand(0), activePlayerSeats)
+    private fun resolvePlayerBlackjacks(playerSeats: List<PlayerSeat>) {
+        playerSeats.filter { it.getHand(0).isBlackjack() }.forEach { payoutHand(it.getHand(0), getBlackjackPayoutRatio()) }
     }
 
     fun discardHands() {
@@ -108,7 +136,7 @@ abstract class Blackjack(private val shoe: Shoe, dealer: Dealer, val minimumBet:
                 Hit -> addCard(shoe.takeTop())
                 DoubleDown -> {
                     (seat as? PlayerSeat)?.run {
-                        doubleBet(hand as PlayerHand)
+                        doubleDown(hand as PlayerHand)
                         addCard(shoe.takeTop())
                     }
                 }
@@ -121,9 +149,13 @@ abstract class Blackjack(private val shoe: Shoe, dealer: Dealer, val minimumBet:
         return@with action
     }
 
+    private fun payInsurance(activeSeats: List<PlayerSeat>) {
+        activeSeats.filter { it.hasBetInsurance() }.forEach { payoutBet(it.person!!, it.getInsuranceBet(), getInsurancePayoutRatio()) }
+    }
+
     private fun payWinners(dealerHand: DealerHand, activeSeats: List<PlayerSeat>) {
         activeSeats.flatMap { it.getHands() }.filterNot { it.isBusted() || it.isResolved() }.forEach {
-            if (it.playingTotal() > dealerHand.playingTotal() || dealerHand.isBusted()) payoutHand(it, getWinnerPayoutRatio())
+            if (it.playingTotal() > dealerHand.playingTotal() || dealerHand.isBusted()) payoutHand(it, getWinnerPayoutRatio(it))
             else if (it.playingTotal() == dealerHand.playingTotal()) pushHand(it)
         }
     }
@@ -141,31 +173,19 @@ abstract class Blackjack(private val shoe: Shoe, dealer: Dealer, val minimumBet:
     }
 
     private fun payoutHand(hand: PlayerHand, payoutRatio: Float) {
-        with(hand) {
-            owner.addAllChips(getBet())
-            owner.addAllChips(ChipUtil.getChips((betTotal() * payoutRatio).toInt()))
-            markResolved()
-        }
+        payoutBet(hand.owner, hand.getBet(), payoutRatio)
+        hand.markResolved()
+    }
+
+    private fun payoutBet(player: Player, bet: List<Chip>, payoutRatio: Float) {
+        player.addAllChips(bet)
+        player.addAllChips(ChipUtil.getChips((ChipUtil.getTotalRaw(bet) * payoutRatio).toInt()))
     }
 
     private fun pushHand(hand: PlayerHand) {
         hand.owner.addAllChips(hand.getBet())
         hand.markResolved()
     }
-
-    abstract fun getBlackjackPayoutRatio(): Float
-
-    abstract fun getWinnerPayoutRatio(): Float
-
-    abstract fun getSurrenderPayoutRatio(): Float
-
-    abstract fun isInstantPayoutAt21(): Boolean
-
-    abstract fun canDoubleDown(hand: PlayerHand): Boolean
-
-    abstract fun canSurrender(seat: PlayerSeat, hand: PlayerHand): Boolean
-
-    abstract fun canSplit(splitCount: Int, hand: PlayerHand): Boolean
 
     private fun getAvailableActions(seat: Seat<*, *>, hand: Hand<*>, lastAction: Hand.Action): List<Hand.Action> {
         if (seat is DealerSeat) return arrayListOf(Hit, Stay)
@@ -181,7 +201,23 @@ abstract class Blackjack(private val shoe: Shoe, dealer: Dealer, val minimumBet:
         }
     }
 
-    private fun Hand<*>.playingTotal() = cardTotal().filter { it <= 21 }.max() ?: cardTotal().min() ?: 0
+    abstract fun getBlackjackPayoutRatio(): Float
+
+    abstract fun getWinnerPayoutRatio(hand: PlayerHand): Float
+
+    abstract fun getSurrenderPayoutRatio(): Float
+
+    abstract fun getInsurancePayoutRatio(): Float
+
+    abstract fun playerBlackjackBeatsDealerBlackjack(): Boolean
+
+    abstract fun isInstantPayoutAt21(): Boolean
+
+    abstract fun canDoubleDown(hand: PlayerHand): Boolean
+
+    abstract fun canSurrender(seat: PlayerSeat, hand: PlayerHand): Boolean
+
+    abstract fun canSplit(splitCount: Int, hand: PlayerHand): Boolean
 
     private inline fun <A, B, R> Pair<A, B>.letEach(block: (A, B) -> R) = block.invoke(first, second)
 }
